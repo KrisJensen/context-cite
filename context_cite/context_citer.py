@@ -134,6 +134,10 @@ class ContextCiter:
         )
         return cls(model, tokenizer, context, **kwargs)
 
+    def set_query(self, query_text):
+        self._cache["query_text"] = query_text
+        self.compute_output()
+
     def _get_prompt_ids(
         self,
         mask: Optional[NDArray] = None,
@@ -153,16 +157,14 @@ class ContextCiter:
         prompt_ids = self._get_prompt_ids()
         return len(prompt_ids)
 
+    def compute_output(self):
+        prompt_ids, prompt = self._get_prompt_ids(return_prompt=True)
+        self._cache["output"] = prompt + "\n" + self._cache["query_text"]
+
     @property
     def _output(self):
         if self._cache.get("output") is None:
-            prompt_ids, prompt = self._get_prompt_ids(return_prompt=True)
-            input_ids = ch.tensor([prompt_ids], device=self.model.device)
-            output_ids = self.model.generate(input_ids, **self.generate_kwargs)[0]
-            # We take the original prompt because sometimes encoding and decoding changes it
-            raw_output = self.tokenizer.decode(output_ids)
-            prompt_length = len(self.tokenizer.decode(prompt_ids))
-            self._cache["output"] = prompt + raw_output[prompt_length:]
+            self.compute_output()
         return self._cache["output"]
 
     @property

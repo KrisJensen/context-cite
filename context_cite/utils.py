@@ -25,6 +25,8 @@ def split_text(text: str, split_by: str) -> Tuple[List[str], List[str], List[str
         elif split_by == "word":
             tokenizer = English().tokenizer
             parts = [token.text for token in tokenizer(text)]
+        elif split_by == "paragraph":
+            parts = text.split("\n\n")
         else:
             raise ValueError(f"Cannot split response by '{split_by}'")
 
@@ -61,7 +63,11 @@ def highlight_word_indices(words, indices, separators, color: bool):
 def _create_mask(num_sources, alpha, seed):
     random = np.random.RandomState(seed)
     p = [1 - alpha, alpha]
-    return random.choice([False, True], size=num_sources, p=p)
+    masks = [0]
+    while np.sum(masks) == 0: # ensure we have at least one source
+        masks = random.choice([False, True], size=num_sources, p=p)
+    #print(masks.shape, np.sum(masks))
+    return masks
 
 
 def _create_regression_dataset(
@@ -209,7 +215,7 @@ def get_attributions_df(
     df = pd.DataFrame.from_dict(
         {"Score": selected_attributions, "Source": selected_sources}
     )
-    df = _apply_color_scale(df).format(precision=3)
+    #df = _apply_color_scale(df).format(precision=3)
     return df
 
 
