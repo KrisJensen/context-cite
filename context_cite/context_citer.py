@@ -16,10 +16,7 @@ from .utils import (
     char_to_token,
 )
 
-
 DEFAULT_GENERATE_KWARGS = {"max_new_tokens": 512, "do_sample": False}
-DEFAULT_PROMPT_TEMPLATE = "Context: {context}\n\nQuery: {query}"
-
 
 class ContextCiter:
     def __init__(
@@ -27,14 +24,13 @@ class ContextCiter:
         model: Any,
         tokenizer: Any,
         context: str,
-        query: str,
         source_type: str = "sentence",
         generate_kwargs: Optional[Dict[str, Any]] = None,
         num_ablations: int = 64,
         ablation_keep_prob: float = 0.5,
+        solver_alpha = 1e-3,
         batch_size: int = 1,
         solver: Optional[BaseSolver] = None,
-        prompt_template: str = DEFAULT_PROMPT_TEMPLATE,
         partitioner: Optional[BaseContextPartitioner] = None,
     ) -> None:
         """
@@ -50,8 +46,6 @@ class ContextCiter:
                 The tokenizer associated with the provided model.
             context (str):
                 The context provided to the model
-            query (str):
-                The query to pose to the model.
             source_type (str, optional):
                 The type of source to partition the context into. Defaults to
                 "sentence", can also be "word".
@@ -70,9 +64,6 @@ class ContextCiter:
             solver (Optional[Solver], optional):
                 The solver to use to compute the linear surrogate model. Lasso
                 regression is used by default.
-            prompt_template (str, optional):
-                A template string used to create the prompt from the context
-                and query.
             partitioner (Optional[BaseContextPartitioner], optional):
                 A custom partitioner to split the context into sources. This
                 will override "source_type" if specified.
@@ -88,13 +79,11 @@ class ContextCiter:
             self.partitioner = partitioner
             if self.partitioner.context != context:
                 raise ValueError("Partitioner context does not match provided context.")
-        self.query = query
         self.generate_kwargs = generate_kwargs or DEFAULT_GENERATE_KWARGS
         self.num_ablations = num_ablations
         self.ablation_keep_prob = ablation_keep_prob
         self.batch_size = batch_size
-        self.solver = solver or LassoRegression()
-        self.prompt_template = prompt_template
+        self.solver = solver or LassoRegression(lasso_alpha = solver_alpha)
 
         self._cache = {}
         self.logger = logging.getLogger("ContextCite")
@@ -108,7 +97,6 @@ class ContextCiter:
         cls,
         pretrained_model_name_or_path,
         context: str,
-        query: str,
         device: str = "cuda",
         model_kwargs: Dict[str, Any] = {},
         tokenizer_kwargs: Dict[str, Any] = {},
@@ -122,11 +110,7 @@ class ContextCiter:
                 The name or path of the pretrained model. This can be a local
                 path or a model name on the HuggingFace model hub.
             context (str):
-                The context provided to the model. The context and query will be
-                used to construct a prompt for the model, using the prompt template.
-            query (str):
-                The query provided to the model. The context and query will be
-                used to construct a prompt for the model, using the prompt template.
+                The context provided to the model.
             device (str, optional):
                 The device to use. Defaults to "cuda".
             model_kwargs (Dict[str, Any], optional):
@@ -139,7 +123,7 @@ class ContextCiter:
         Returns:
             ContextCiter:
                 A ContextCiter instance initialized with the provided model,
-                tokenizer, context, query, and other keyword arguments.
+                tokenizer, context, and other keyword arguments.
         """
         model = AutoModelForCausalLM.from_pretrained(
             pretrained_model_name_or_path, **model_kwargs
@@ -148,19 +132,15 @@ class ContextCiter:
         tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path, **tokenizer_kwargs
         )
-        return cls(model, tokenizer, context, query, **kwargs)
+        return cls(model, tokenizer, context, **kwargs)
 
     def _get_prompt_ids(
         self,
         mask: Optional[NDArray] = None,
         return_prompt: bool = False,
     ):
-        context = self.partitioner.get_context(mask)
-        prompt = self.prompt_template.format(context=context, query=self.query)
-        messages = [{"role": "user", "content": prompt}]
-        chat_prompt = self.tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
-        )
+        # optionally apply a mask to the context
+        chat_prompt = self.partitioner.get_context(mask)
         chat_prompt_ids = self.tokenizer.encode(chat_prompt, add_special_tokens=False)
 
         if return_prompt:
