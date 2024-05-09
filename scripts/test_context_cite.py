@@ -11,7 +11,8 @@ torch.cuda.empty_cache()
 gc.collect()
 
 # this is the language model we will be using
-model_name_or_path = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+#model_name_or_path = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" # This is a chat model
+model_name_or_path = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T" # this is a generic text model
 
 # this is the 'background' text that we will attribute importance to
 context_text = """
