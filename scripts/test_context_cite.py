@@ -5,6 +5,11 @@ import pandas as pd
 import torch
 import gc
 from context_cite import ContextCiter
+from huggingface_hub import login
+from transformers import QuantoConfig
+
+r = torch.cuda.memory_reserved(0)
+torch.cuda.memory_allocated() / 1073741824
 
 # garbage collect
 torch.cuda.empty_cache()
@@ -13,6 +18,7 @@ gc.collect()
 # this is the language model we will be using
 #model_name_or_path = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" # This is a chat model
 model_name_or_path = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T" # this is a generic text model
+#model_name_or_path = "meta-llama/Meta-Llama-3-8B" # this model has a longer context set
 
 # this is the 'background' text that we will attribute importance to
 context_text = """
@@ -144,29 +150,6 @@ But Gary is giddy and thrilled and sees nothing wrong with their lives.
 And what is so sad -- he really believes this...
 """
 
-# can try another text as well
-query_2 = """
-Two months later. October 2001 - New York City.
-"I wish you weren't going back to LA so soon." 
-"Not until we find Gary..." Clara puts her arm around Gary's mom.
-She looks up, so fragile.
-Clara cuts the scotch-tape, and Gary's mom chooses the spot for their flier.
-They walk the city looking for surfaces to plaster their plea: "Missing since 9/11."
-Gary's face looks up from the flier: elated, graduating, cap and gown and all.
-They tape his face next to the weathered fliers of missing bankers, secretaries, firefighters.
-They run out, but Gary's mom is not done.
-She pulls Clara into the Kinko's on 72nd and Broadway.
-"I've noticed the successful fliers, how they do it," she whispers.
-"Successful fliers?" asks Clara.
-The hand of Gary's mom shakes.
-She pulls a faded Polaroid out of her purse: Gary, the toddler, bikes on the grass.
-"Let's add this photo next, then I want you to keep it..."
-"I'll run us a thousand copies, ok?" Clara says softly.
-"The successful fliers, make you care..."
-Gary's mom locks eyes with her daughter-in-law.
-"We need people to care..."
-"""
-
 # decide the level at which we compute attributions ('paragraph', 'sentence', or 'word')
 source_type = "paragraph"
 
@@ -176,29 +159,36 @@ ablation_keep_prob = 0.5
 # they fit an L1 regularized model to estimate the importance of scenes, and this is the regularization strength
 solver_alpha = 1e-3
 
+model_kwargs = {}
+if "Meta" in model_name_or_path:
+    # need to quantize to float8 to fit on a single GPU
+    model_kwargs["quantization_config"] = QuantoConfig(weights="float8")
+    
+    # need to pass authentication key if this hasn't been configured already
+    # login()
+    
+    # maximum length of the context text (in units of tokens)
+    max_context_length = 8000
+elif "tiny" in model_name_or_path: # using tinyllama
+    # maximum length of the context text (in units of tokens)
+    max_context_length = 2048
+else:
+    raise NotImplementedError
+    
 # instantiate model
-cc = ContextCiter.from_pretrained(model_name_or_path, context_text, solver_alpha = solver_alpha, source_type = source_type)
+cc = ContextCiter.from_pretrained(model_name_or_path, context_text, solver_alpha = solver_alpha, source_type = source_type, model_kwargs=model_kwargs)
 
 # set the query for the model
 cc.set_query(query_text)
-#cc.set_query(query_2) # could try a different query
 
 # print the full output (context + query) just to check that things vaguely work
 print(cc._output) 
+# make sure that we're not exceeding the maximum context length of the model
+assert len(cc._output_tokens["input_ids"]) <= max_context_length 
 
 # delete cached logit probs in case we have changed something (otherwise we will use the cached results)
 cc._cache["reg_logit_probs"] = None
 # compute 'attributions'
 results = cc.get_attributions(as_dataframe=True, top_k=10)
 print(results) # print stuff
-
-
-
-
-
-### this is just some random code I used for debugging ###
-from context_cite.utils import split_text
-parts_w, separators_w, start_indices_w = split_text(context_text, "word")
-parts_s, separators_s, start_indices_s = split_text(context_text, "sentence")
-parts_p, separators_p, start_indices_p = split_text(context_text, "paragraph")
 
