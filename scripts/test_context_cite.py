@@ -8,13 +8,6 @@ from context_cite import ContextCiter
 from huggingface_hub import login
 from transformers import QuantoConfig
 
-r = torch.cuda.memory_reserved(0)
-torch.cuda.memory_allocated() / 1073741824
-
-# garbage collect
-torch.cuda.empty_cache()
-gc.collect()
-
 # this is the language model we will be using
 #model_name_or_path = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" # This is a chat model
 model_name_or_path = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T" # this is a generic text model
