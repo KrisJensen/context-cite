@@ -1,7 +1,7 @@
-huggingface_hub
-transformers
-pytorch
 pandas
 numpy
 scikit-learn
+scipy
 tqdm
+huggingface_hub
+transformers

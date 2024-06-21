@@ -158,7 +158,7 @@ if "Meta" in model_name_or_path:
     model_kwargs["quantization_config"] = QuantoConfig(weights="float8")
     
     # need to pass authentication key if this hasn't been configured already
-    login()
+    #login()
     
     # maximum length of the context text (in units of tokens)
     max_context_length = 8000
