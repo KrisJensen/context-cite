@@ -5,3 +5,6 @@ scipy
 tqdm
 huggingface_hub
 transformers
+quanto
+accelerate
+bitsandbytes
