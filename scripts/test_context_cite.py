@@ -6,12 +6,13 @@ import torch
 import gc
 from context_cite import ContextCiter
 from huggingface_hub import login
-from transformers import QuantoConfig
+from transformers import QuantoConfig, BitsAndBytesConfig
 
 # this is the language model we will be using
 #model_name_or_path = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" # This is a chat model
 #model_name_or_path = "TinyLlama/TinyLlama-1.1B-intermediate-step-1431k-3T" # this is a generic text model
-model_name_or_path = "meta-llama/Meta-Llama-3-8B" # this model has a longer context set
+#model_name_or_path = "meta-llama/Meta-Llama-3-8B" # this model has a longer context set
+model_name_or_path = "meta-llama/Meta-Llama-3.1-8B" # this model has a longer context set
 
 # this is the 'background' text that we will attribute importance to
 context_text = """
@@ -153,21 +154,30 @@ ablation_keep_prob = 0.5
 solver_alpha = 1e-3
 
 model_kwargs = {}
-if "Meta" in model_name_or_path:
+if ("Meta" in model_name_or_path):
     # need to quantize to float8 to fit on a single GPU
-    model_kwargs["quantization_config"] = QuantoConfig(weights="float8")
+    #model_kwargs["quantization_config"] = QuantoConfig(weights="float8")
+    model_kwargs["quantization_config"] = QuantoConfig(weights="int8")
+    #model_kwargs["quantization_config"] = BitsAndBytesConfig(load_in_8bit=True)
     
     # need to pass authentication key if this hasn't been configured already
-    login()
+    #login()
     
     # maximum length of the context text (in units of tokens)
-    max_context_length = 8000
+    if "-3-" in model_name_or_path:
+        max_context_length = 8000
+    elif "-3.1-" in model_name_or_path:
+        max_context_length = 128000
+    else:
+        print("model context length not know")
+        raise NotImplementedError
 elif "tiny" in model_name_or_path: # using tinyllama
     # maximum length of the context text (in units of tokens)
     max_context_length = 2048
 else:
     raise NotImplementedError
-    
+
+
 # instantiate model
 cc = ContextCiter.from_pretrained(model_name_or_path, context_text, solver_alpha = solver_alpha, source_type = source_type, model_kwargs=model_kwargs)
 
@@ -176,6 +186,7 @@ cc.set_query(query_text)
 
 # print the full output (context + query) just to check that things vaguely work
 print(cc._output) 
+print(len(cc._output_tokens["input_ids"]))
 # make sure that we're not exceeding the maximum context length of the model
 assert len(cc._output_tokens["input_ids"]) <= max_context_length 
 
