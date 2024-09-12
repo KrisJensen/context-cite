@@ -19,16 +19,19 @@ def split_text(text: str, split_by: str) -> Tuple[List[str], List[str], List[str
     separators = []
     start_indices = []
 
-    for line in text.splitlines():
-        if split_by == "sentence":
-            parts.extend(nltk.sent_tokenize(line))
-        elif split_by == "word":
+    if split_by == "paragraph":
+        parts = text.split("\n\n")
+    elif split_by == "line":
+        parts = text.split("\n")
+    elif split_by == "word":
+        for line in text.splitlines():
             tokenizer = English().tokenizer
             parts = [token.text for token in tokenizer(text)]
-        elif split_by == "paragraph":
-            parts = text.split("\n\n")
-        else:
-            raise ValueError(f"Cannot split response by '{split_by}'")
+    elif split_by == "sentence":
+        for line in text.splitlines():
+            parts.extend(nltk.sent_tokenize(line))
+    else:
+        raise ValueError(f"Cannot split response by '{split_by}'")
 
     cur_start = 0
     for part in parts:
